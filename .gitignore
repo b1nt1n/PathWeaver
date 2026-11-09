@@ -1,0 +1,22 @@
+build/
+build-*/
+.vscode/
+.idea/
+*.geode
+# what leveldp writes when it is run without --out, so it cannot be committed by accident
+leveldp_plan.txt*
+# Local solver plans, traces and calibration data.
+/data/
+data-*/
+
+__pycache__/
+*.pyc
+
+# Local MCP registration.
+.mcp.json
+# Private instructions / skills for this machine
+CLAUDE.local.md
+.claude/
+
+# Semantic code index (cocoindex-code); machine-local
+/.cocoindex_code/

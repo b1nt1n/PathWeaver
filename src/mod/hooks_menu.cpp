@@ -1,0 +1,173 @@
+// MenuLayer hook: auto-enter and the suite's resident ticker. (The mode choice for a level the
+// player picks is the play menu, hooks_playmenu.cpp.)
+#include "mod/playlayer_helpers.hpp"
+#include "mod/gd_compat.hpp"
+
+using namespace p1;
+
+// ---- Auto-enter ----
+class $modify(P1MenuLayer, MenuLayer) {
+    GDSOLVER_HOOK_GUARD()
+    bool init() {
+        if (!MenuLayer::init()) return false;
+        // Announce once that the mod is here and what it suppresses. This is the minimal
+        // implementation of "the mod's enabled state must be detectable from outside".
+        // Say what the gate actually does: it is botDriving(), an automated session being
+        // open -- NOT the mod being installed. The line used to claim the block was on
+        // whenever the mod was loaded and told the reader to disable it to record progress,
+        // which is not true and is the opposite of the promise the safety gate makes.
+        static bool s_notified = false;
+        if (!s_notified) {
+            s_notified = true;
+            log::info("PathWeaver: loaded. While the bot drives -- solving or replaying -- "
+                      "achievements, statistics, coins and the level's own record are all "
+                      "blocked. Your own attempts, with the bot idle, record as usual.");
+        }
+        // The resident ticker that carries a `levels=` suite from one level to the next. It is on
+        // the director's scheduler because between two levels of a suite there is no game layer
+        // and no session, so this is the only thing of ours still ticking. A 0.1 s interval is
+        // enough (every frame is wasteful).
+        static bool s_keeperMade = false;
+        if (!s_keeperMade) {
+            s_keeperMade = true;
+            auto* suiteKeeper = new SuiteKeeper();
+            CCDirector::sharedDirector()->getScheduler()->scheduleSelector(
+                schedule_selector(SuiteKeeper::tick), suiteKeeper, 0.1f, false);
+        }
+        static bool s_ranOnce = false;
+        if (!s_ranOnce) {
+            s_ranOnce = true;
+            resolveDataDir(); // must be settled BEFORE the first file access
+            postmortem::install(); // leave at least one line of crash cause (after DATA_DIR)
+            loadConfig();
+            // A key the flag clean-up removed (session.hpp kRemovedCfg) is refused by name for EVERY
+            // autorun -- solve, replay, serve -- here, before any file is opened or session_start is
+            // written: a stale autorun.cfg must not run as if the key had never been there. The game
+            // stays up at the menu (no auto-enter, no session); the lines are in result.txt, one is on
+            // the screen when a person is looking (a worker that quits when done shows nothing).
+            if (g_cfg.enabled && !g_cfgRemoved.empty()) {
+                bool first = true;
+                for (const auto& m : g_cfgRemoved) {
+                    writeResult("cfg: " + m, first);
+                    first = false;
+                }
+                writeResult("autorun: refused - autorun.cfg names " + std::to_string(g_cfgRemoved.size())
+                            + " removed key(s); no session was started");
+                log::error("PathWeaver: autorun.cfg names {} removed key(s) ({}); no session was started",
+                           g_cfgRemoved.size(), g_cfgRemoved.front());
+                this->runAction(CCSequence::create(
+                    CCDelayTime::create(1.5f),
+                    CCCallFunc::create(this, callfunc_selector(P1MenuLayer::onRemovedCfg)),
+                    nullptr));
+                return true;
+            }
+            if (g_cfg.enabled) {
+                openFiles();
+                stallwatch::start();
+                writeResult("session_start", true);
+                dpsolve::memCensus("session start");   // cfg memcensus (print only)
+                writeResult(dpConfigLine());   // the solver configuration, one line
+                // Say once, plainly, whether the research trail (dp_band_itN/dp_groups_itN and
+                // the recorder's dp_fixin_*/dp_attempt_itN files) is being kept this session --
+                // see Config::researchCapture for why it defaults off.
+                writeResult(g_cfg.researchCapture
+                    ? "session: research capture on (per-attempt band/groups/recorder-input copies are kept)"
+                    : "session: research capture off (per-attempt band/groups/recorder-input copies are not kept)");
+                // Load the plan onto the very first attempt of serve mode too. Relying on
+                // rerun, a session that finishes without dying (nodeath) would never receive
+                // the plan. Start-Serve always writes plan_in.txt before launch (if it is
+                // empty this branch does nothing)
+                if (g_serveMode) {
+                    std::vector<InputCmd> plan;
+                    loadPlanExtras(std::string(DATA_DIR) + "/plan_in.txt");
+                    if (loadInputsFile(std::string(DATA_DIR) + "/plan_in.txt", plan)) {
+                        if (hasPlayer2Inputs(plan) || sessionHasPlayer2Inputs()) {
+                            endSession("input2_unsupported_serve");
+                            return true;
+                        }
+                        sortInputs(plan);
+                        g_cfg.inputs = std::move(plan);
+                        writeResult("serve: initial plan "
+                            + std::to_string(g_cfg.inputs.size()) + " inputs");
+                    }
+                }
+                if (g_cfg.fps > 0) {
+                    auto* gm = GameManager::sharedState();
+                    gm->m_vsyncEnabled = false;
+                    gm->m_customFPSTarget = (float)g_cfg.fps;
+                    gm->updateCustomFPS();
+                    // vsync is really the GL swap interval. Disable it directly at runtime
+                    // (Windows: WGL; Android keeps the game's own vsync setting only)
+#ifdef GEODE_IS_WINDOWS
+                    using SwapIntervalFn = BOOL(WINAPI*)(int);
+                    auto ogl = GetModuleHandleA("opengl32.dll");
+                    auto getProc = (PROC(WINAPI*)(LPCSTR))GetProcAddress(ogl, "wglGetProcAddress");
+                    if (getProc) {
+                        auto swapInterval = (SwapIntervalFn)getProc("wglSwapIntervalEXT");
+                        if (swapInterval) {
+                            swapInterval(0);
+                            log::info("phase1: vsync disabled via wglSwapIntervalEXT");
+                        }
+                    }
+#endif
+                    log::info("phase1: forced custom FPS to {}", g_cfg.fps);
+                }
+                if (Mod::get()->getLaunchArgument("manual-start")) {
+                    auto* menu = CCMenu::create();
+                    menu->setPosition(CCDirector::sharedDirector()->getWinSize() / 2.f);
+                    auto* button = CCMenuItemSpriteExtra::create(ButtonSprite::create("Run Probe"), this,
+                        menu_selector(P1MenuLayer::onProbeEnter));
+                    button->setPosition(ccp(0.f, -60.f));
+                    menu->addChild(button); this->addChild(menu, 100);
+                    if (auto file = Mod::get()->getLaunchArgument("eclipse-probe")) {
+                        if (auto* ecl = Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
+                            auto folder = ecl->getSaveDir() / "replays";
+                            if (folder.string().find("GeometryDash-PWPF-G1-01") != std::string::npos) {
+                                std::error_code ec; std::filesystem::create_directories(folder, ec);
+                                const auto target = folder / (std::string("PW_probe") + std::filesystem::path(*file).extension().string());
+                                std::filesystem::copy_file(*file, target, std::filesystem::copy_options::overwrite_existing, ec);
+                                writeResult("probe: Eclipse fixture " + target.generic_string() + " error=" + ec.message());
+                            }
+                        }
+                    }
+                } else {
+                    this->runAction(CCSequence::create(
+                        CCDelayTime::create(g_cfg.delaySec),
+                        CCCallFunc::create(this, callfunc_selector(P1MenuLayer::onAutoEnter)), nullptr));
+                }
+            }
+        }
+        return true;
+    }
+
+    void onProbeEnter(CCObject*) { onAutoEnter(); }
+
+    void onRemovedCfg() {
+        notify::show("PathWeaver: autorun.cfg names a removed key - no session was started ("
+                         + g_cfgRemoved.front() + ")",
+                     NotificationIcon::Error, 8.f);
+    }
+
+    // The body of this lives in level_entry.hpp as enterConfiguredLevel(), so that the level
+    // suite enters its second and later levels through the same code as its first.
+    void onAutoEnter() {
+        // All MenuLayer::init hooks have returned. External playback is selected
+        // in Eclipse before entering the fresh PlayLayer.
+        if (!profile480::prepare()) {
+            endSession("profile480_prepare_failed");
+            return;
+        }
+        if (suite::active()) {
+            writeResult("suite: level=" + std::to_string(suite::current())
+                        + " (1/" + std::to_string(suite::g_levels.size()) + ")");
+            // Where each level comes from, checked for the whole list before the first one.
+            if (!suiteLevelSource()) {
+                writeResult("suite: done " + std::to_string(suite::g_levels.size()) + " levels");
+                if (g_cfg.quitWhenDone)
+                    Loader::get()->queueInMainThread([] { gdcompat::exitGame(); });
+                return;
+            }
+        }
+        enterConfiguredLevel();
+    }
+};

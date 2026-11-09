@@ -1,0 +1,158 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"win": "2.2081"
+	},
+	"id": "b1nt1n.pathweaver",
+	"name": "PathWeaver",
+	"version": "v0.3.0-alpha.35",
+	"developers": ["b1nt1n", "gdsolver"],
+	"description": "Search for paths, verify them in-game, and export GDR or GDR2 macros.",
+	"tags": ["gameplay", "utility", "offline", "cheat"],
+	"links": {
+		"source": "https://github.com/b1nt1n/PathWeaver",
+		"community": "https://discord.gg/VwtQr8ZUqJ"
+	},
+	"issues": {
+		"info": "Report problems on the GitHub issue tracker.",
+		"url": "https://github.com/b1nt1n/PathWeaver/issues"
+	},
+	"resources": {
+		"files": [
+			"resources/pathweaver-pause.png", "LICENSE", "CREDITS.md", "THIRD_PARTY_NOTICES.md",
+			"third_party/eclipse_api/LICENSE-EPL-2.0.txt",
+			"third_party/eclipse_api/include/eclipse/config.hpp", "third_party/eclipse_api/include/eclipse/events.hpp"
+		]
+	},
+	"settings": {
+		"general-title": {
+			"type": "title",
+			"name": "General",
+			"description": "Ordinary play needs no setup. Open Pause > PathWeaver for Solve, Replay and Export. Search starts with the established defaults."
+		},
+		"path-quality": {
+			"type": "bool",
+			"name": "Simpler ship/wave paths",
+			"description": "Try roomier corridors and fewer extra clicks for ship and wave, without a CPS limit. Experimental; may take longer or choose a different path. Off keeps the established search.",
+			"default": false
+		},
+		"debug-information": {
+			"type": "bool",
+			"name": "Detailed diagnostics",
+			"description": "Show extra search details, the path preview, hitboxes and diagnostic logs. Leave off for a clean screen. Does not improve Solve.",
+			"default": false
+		},
+		"playback-title": {
+			"type": "title",
+			"name": "Replay controls",
+			"description": "Optional shortcuts. The mouse and pause menu are enough for normal use. FPS and macro timing are not changed by playback speed."
+		},
+		"key-pause": {
+			"type": "keybind",
+			"name": "Pause / resume Replay",
+			"default": "F2",
+			"description": "Pause Replay or the path preview during Solve. This does not save or stop the search. Use Pause > PathWeaver > Save and stop to keep a search for later."
+		},
+		"key-step1": {
+			"type": "keybind",
+			"name": "Advance 1 tick",
+			"description": "While Replay or its preview is paused, advance by one physics tick. Hold the key to repeat.",
+			"default": "F3"
+		},
+		"key-step10": {
+			"type": "keybind",
+			"name": "Advance 10 ticks",
+			"description": "While Replay or its preview is paused, advance by ten physics ticks. Hold the key to repeat.",
+			"default": "F4"
+		},
+		"key-replay": {
+			"type": "keybind",
+			"name": "Restart Replay",
+			"default": "F7",
+			"description": "Replay the saved path from the beginning. This does not start a new Solve."
+		},
+		"key-quit": {
+			"type": "keybind",
+			"name": "Leave level",
+			"default": "F9",
+			"description": "Return to the level screen. To keep an unfinished search, use Save and stop in the PathWeaver pause menu first."
+		},
+		"key-faster": {
+			"type": "keybind",
+			"name": "Faster Replay",
+			"default": "Up",
+			"description": "Increase Replay or preview speed. This changes viewing speed, not the macro timing or Solve physics."
+		},
+		"key-slower": {
+			"type": "keybind",
+			"name": "Slower Replay",
+			"default": "Down",
+			"description": "Decrease Replay or preview speed. This changes viewing speed, not the macro timing or Solve physics."
+		},
+		"key-seek-back": {
+			"type": "keybind",
+			"name": "Seek Replay backward",
+			"description": "Move backward through Replay or its preview. While paused, step back instead. Hold to move farther.",
+			"default": "Left"
+		},
+		"key-seek-forward": {
+			"type": "keybind",
+			"name": "Seek Replay forward",
+			"description": "Move forward through Replay or its preview. While paused, step forward instead. Hold to move farther.",
+			"default": "Right"
+		},
+		"diagnostic-title": {
+			"type": "title",
+			"name": "Diagnostic controls",
+			"description": "Extra tools for investigating a problem. Enable Detailed diagnostics to configure these shortcuts."
+		},
+		"key-overlay": {
+			"type": "keybind",
+			"name": "Show / hide details",
+			"description": "Show or hide the detailed overlay. Available with Detailed diagnostics. The PathWeaver bot badge stays visible.",
+			"default": "F1",
+			"enable-if": "debug-information",
+			"enable-if-description": "Enable Detailed diagnostics first."
+		},
+		"key-render": {
+			"type": "keybind",
+			"name": "Show / hide level during Solve",
+			"description": "Diagnostic control. Toggle level drawing while Solve runs. Search keeps running when the level is hidden.",
+			"default": "F5",
+			"enable-if": "debug-information",
+			"enable-if-description": "Enable Detailed diagnostics first."
+		},
+		"key-hitboxes": {
+			"type": "keybind",
+			"name": "Show collision shapes",
+			"default": "F6",
+			"description": "Cycle between normal view, collision shapes, and shapes only. Requires Detailed diagnostics and an automated session.",
+			"enable-if": "debug-information",
+			"enable-if-description": "Enable Detailed diagnostics first."
+		},
+		"key-itermap": {
+			"type": "keybind",
+			"name": "Show search history",
+			"default": "F10",
+			"description": "Diagnostic control. Show where attempts failed and repairs were made. Requires Detailed diagnostics.",
+			"enable-if": "debug-information",
+			"enable-if-description": "Enable Detailed diagnostics first."
+		},
+		"key-replaypanel": {
+			"type": "keybind",
+			"name": "Show path preview",
+			"description": "Diagnostic control. Show or hide the in-game record of the best tested attempt. Requires Detailed diagnostics.",
+			"default": "Tab",
+			"enable-if": "debug-information",
+			"enable-if-description": "Enable Detailed diagnostics first."
+		},
+		"key-takeover-end": {
+			"type": "keybind",
+			"name": "End manual test input",
+			"description": "Developer control. End a manual input test started through a diagnostic configuration. Not needed for ordinary Solve or Replay.",
+			"default": "F8",
+			"enable-if": "debug-information",
+			"enable-if-description": "Enable Detailed diagnostics first."
+		}
+	}
+}
