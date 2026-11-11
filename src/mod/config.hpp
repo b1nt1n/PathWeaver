@@ -133,7 +133,8 @@ struct Config {
     int cbs = -1;       // -1=leave unchanged. 0/1= force m_clickBetweenSteps
     int cos = -1;       // -1=leave unchanged. 0/1= force m_clickOnSteps
     float framedt = 0;  // >0: pin the dt passed to BGL_update to this value (fake frame rate)
-    bool profile480 = false; // G3 continuous replay; Eclipse owns the only physics bypass.
+    bool profile480 = false; // 480 TPS with Eclipse as the physics timebase.
+    int sessionTps = 0; // Explicit UI or autorun timebase. Zero keeps the legacy diagnostic config.
     std::string externalReplay; // GDR2 selected in xdBot; PathWeaver observes without injecting.
     bool blockInput = false; // block real input (other than injection) during replay
     // cfg `progblock`: block the level-progress recording (percentage, attempts, rewards).

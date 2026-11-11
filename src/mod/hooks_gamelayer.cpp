@@ -1257,7 +1257,8 @@ class $modify(GJBaseGameLayer) {
         if (g_started && !g_sessionOver) {
             auto* pl = PlayLayer::get();
             if (pl) {
-                if (g_cfg.practiceAt >= 0 && !g_practiceOn && g_tick >= g_cfg.practiceAt) {
+                const bool checkpointReady = !g_cfg.profile480 || !g_cfg.dpSolve || pl->m_started;
+                if (checkpointReady && g_cfg.practiceAt >= 0 && !g_practiceOn && g_tick >= g_cfg.practiceAt) {
                     g_practiceOn = true;
                     pl->togglePracticeMode(true);
                     ev("PRACTICE_on");
@@ -1315,7 +1316,7 @@ class $modify(GJBaseGameLayer) {
                                     + " FAILED (markCheckpoint returned 0)");
                     }
                 }
-                if (g_cfg.checkpointAt >= 0 && !g_ckpt && g_tick >= g_cfg.checkpointAt) {
+                if (checkpointReady && g_cfg.checkpointAt >= 0 && !g_ckpt && g_tick >= g_cfg.checkpointAt) {
                     // vytest writes BEFORE markCheckpoint, or the checkpoint has
                     // already copied the real velocity and the test measures
                     // nothing (first attempt: whatever was injected, the restore
@@ -2798,7 +2799,7 @@ class $modify(GJBaseGameLayer) {
         checkHybridDeadline();
         if (g_secEarly.running()) ++g_secEarly.searchSteps;
         secsolve::g_feed = down;
-        GJBaseGameLayer::update((float)secsolve::g_dt);
+        GJBaseGameLayer::update(g_cfg.profile480 ? 1.f / 480.f : (float)secsolve::g_dt);
         if (g_nativeHybridChild && !secDualP2())
             throw HybridStop{native_request::Verdict::RestoreRefused, "dual_transition"};
     }
@@ -5682,7 +5683,7 @@ class $modify(GJBaseGameLayer) {
                 verifyVy2 = q->m_yVelocity;
             }
             g_leafVerified = true;
-            if (g_grace <= 0 || hybridPhase == 1) return 0; // the proposal makes no claim about the pair's exit
+            if (g_grace <= 0 || hybridPhase == 1 || g_cfg.profile480) return 0;
             // Exit survivability (see the note on g_grace). Two runs are not enough -- the
             // spider can teleport even in the air if a surface is in range, so "never
             // press" and "always hold" both dying is no proof that "input can do nothing".
@@ -7504,6 +7505,35 @@ class $modify(GJBaseGameLayer) {
             }
             finishSecJointRequest(result);
         }
+        if (g_cfg.profile480 && g_cfg.dpSolve) {
+            if (foundLeaf < 0 || !g_leafVerified || g_ckptTick != 0) {
+                notify::show("480 TPS Solve found no verified path.", NotificationIcon::Warning, 5.f);
+                endSession("solve480_no_path");
+                co_return;
+            }
+            int held = 0;
+            const auto masks = inputVecOf(foundLeaf);
+            for (size_t i = 0; i < masks.size(); ++i) {
+                appendInputMask(g_cfg.inputs, static_cast<int>(i), held, masks[i]);
+                held = masks[i];
+            }
+            dpsolve::g_planClaimsGoal = true;
+            g_cfg.practiceAt = g_cfg.checkpointAt = -1;
+            g_practiceOn = false;
+            g_ckpt->release();
+            g_ckpt = nullptr;
+            g_ckptTick = -1;
+            secsolve::g_on = false;
+            g_cfg.fastloops = 1800;
+            g_forceCleanStart = true;
+            g_hudPhase = "testing path at 480 TPS";
+            writeResult("solve480: verifying " + std::to_string(g_cfg.inputs.size()) + " inputs from the start");
+            coinBook.restore();
+            coinBook.armed = false;
+            pl->resetLevel();
+            secRenderRelease();
+            co_return;
+        }
         if (g_secRung) {
             const long long completedBase = g_ckptTick;
             const int completedHorizon = g_horizon;
@@ -7831,11 +7861,14 @@ class $modify(GJBaseGameLayer) {
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         if (g_hybridFlight.request && static_cast<GJBaseGameLayer*>(PlayLayer::get()) == this)
             verifyHybridFlight(dt, isHalfTick);
-        if (g_cfg.profile480 && g_started && !g_sessionOver
-            && (dt != 1.f / 480.f || isHalfTick)) {
-            writeResult("profile480: actual physics step disagrees with 1/480; dt=" + std::to_string(dt)
-                + " half=" + std::to_string(isHalfTick) + "; stopping");
-            endSession("profile480_mismatch");
+        const int expectedTps = g_cfg.profile480 ? 480 : g_cfg.sessionTps;
+        if (expectedTps && g_started && !g_sessionOver
+            && static_cast<GJBaseGameLayer*>(PlayLayer::get()) == this
+            && (isHalfTick ? expectedTps == 480 : dt != 1.f / expectedTps)) {
+            writeResult(fmt::format("timebase: expected {} TPS, tick={} dt={:.9g} half={}", expectedTps, g_tick, dt, isHalfTick));
+            notify::show("PathWeaver stopped because another mod changed the physics tick rate.", NotificationIcon::Warning, 5.f);
+            endSession(g_cfg.sessionTps ? "timebase_mismatch" : "profile480_mismatch");
+            return;
         }
         if (g_started && !g_sessionOver && m_player1 && !m_player1->m_isDead
             && m_levelEndAnimationStarted && (m_player1->m_isLocked || m_player1->m_controlsDisabled)
@@ -7918,7 +7951,7 @@ class $modify(GJBaseGameLayer) {
             g_attemptFed = true;
             g_nextInputAtStart = g_nextInput;
         }
-        if (secsolve::g_active) {
+        if (secsolve::g_active && !g_cfg.profile480) {
             if (g_sectionJointInputs) {
                 const int changed = secsolve::g_feed ^ g_sectionInputMask;
                 if (secsolve::g_log && g_stepSpine && g_stepDepth <= 2 && g_cfg.roboDbg0 >= 0) {
@@ -9279,7 +9312,15 @@ class $modify(GJBaseGameLayer) {
     void processQueuedButtons(float dt, bool clearInputQueue) {
         if (g_cfg.profile480 && g_cfg.externalReplay.empty() && g_started && !g_sessionOver
             && static_cast<GJBaseGameLayer*>(PlayLayer::get()) == this) {
-            while (g_finishInputLimit == noFinishInputLimit && g_nextInput < g_cfg.inputs.size() && g_cfg.inputs[g_nextInput].step <= g_tick) {
+            if (secsolve::g_active) {
+                const int changed = secsolve::g_feed ^ secsolve::g_held;
+                g_injecting = true;
+                if (changed & 1) this->queueButton(1, (secsolve::g_feed & 1) != 0, false, 0.0);
+                if (g_sectionJointInputs && (changed & 2)) this->queueButton(1, (secsolve::g_feed & 2) != 0, true, 0.0);
+                g_injecting = false;
+                secsolve::g_held = secsolve::g_feed;
+                g_sectionInputMask = secsolve::g_feed;
+            } else while (g_finishInputLimit == noFinishInputLimit && g_nextInput < g_cfg.inputs.size() && g_cfg.inputs[g_nextInput].step <= g_tick) {
                 const auto& in = g_cfg.inputs[g_nextInput];
                 ev(in.player1 ? "INJECT_queueButton" : "INJECT_queueButton_P2", in.step, in.down);
                 g_injecting = true;

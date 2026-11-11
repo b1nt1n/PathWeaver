@@ -30,6 +30,13 @@
 			"name": "General",
 			"description": "Ordinary play needs no setup. Open Pause > PathWeaver for Solve, Replay and Export. Search starts with the established defaults."
 		},
+		"solve-tps": {
+			"type": "string",
+			"name": "Solve tick rate",
+			"description": "Physics ticks per second for the next Solve. 480 uses the experimental in-game search with Eclipse 1.9.4. Replay uses the rate stored in its plan.",
+			"default": "240",
+			"one-of": ["240", "480"]
+		},
 		"path-quality": {
 			"type": "bool",
 			"name": "Simpler ship/wave paths",

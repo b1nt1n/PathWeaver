@@ -373,7 +373,7 @@ protected:
     CCMenuItemToggler* m_secToggle = nullptr;
     CCMenuItemToggler* m_debugToggle = nullptr;
     CCMenuItemToggler* m_qualityToggle = nullptr;
-    cocos2d::CCLabelBMFont* m_summary = nullptr;
+    CCMenuItemToggler* m_tpsToggle = nullptr;
     cocos2d::CCLabelBMFont* m_glitchValue = nullptr;
     cocos2d::CCLabelBMFont* m_searchValue = nullptr;
 
@@ -457,8 +457,8 @@ protected:
                 Mod::get()->getSettingValue<bool>("path-quality"), menu_selector(Options::onQuality), 5);
             m_debugToggle = addToggleRow("debug-information", "Detailed diagnostics", -103.f,
                 Mod::get()->getSettingValue<bool>("debug-information"), menu_selector(Options::onDebug), 4);
-            m_summary = CCLabelBMFont::create("", "chatFont.fnt");
-            ui::addChildAtPosition(m_mainLayer, m_summary, Anchor::Top, ccp(0, -143.f));
+            m_tpsToggle = addToggleRow("solve-tps", "Solve at 480 TPS", -141.f,
+                Mod::get()->getSettingValue<std::string>("solve-tps") == "480", menu_selector(Options::onTps), 6);
         }
         const auto addButton = [&](const char* text, const char* id, float y, cocos2d::SEL_MenuHandler callback) {
             auto* spr = ButtonSprite::create(text, "goldFont.fnt", "GJ_button_04.png", .6f);
@@ -488,11 +488,6 @@ protected:
             ui::limitNodeWidth(m_searchValue, 150.f, .55f, .3f);
             m_searchValue->setColor(m_search == UI_SEARCH_DP ? kWhite : kWarnRed);
             m_secToggle->toggle(m_secSolve);
-        }
-        if (m_summary) {
-            m_summary->setString(m_glitch == UI_GLITCH_OFF && m_search == UI_SEARCH_DP && m_secSolve
-                ? "Recommended search ready | 240 TPS" : "Custom search settings in Advanced");
-            ui::limitNodeWidth(m_summary, 267.f, .55f, .35f);
         }
         if (m_onChange) m_onChange(m_glitch, m_search, m_secSolve);
     }
@@ -526,6 +521,11 @@ protected:
         Mod::get()->setSettingValue<bool>("debug-information", !m_debugToggle->isToggled());
     }
 
+    void onTps(CCObject*) {
+        Mod::get()->setSettingValue<std::string>("solve-tps", m_tpsToggle->isToggled() ? "240" : "480");
+        if (m_onChange) m_onChange(m_glitch, m_search, m_secSolve);
+    }
+
     void onGlitch(CCObject* sender) {
         const int dir = static_cast<cocos2d::CCNode*>(sender)->getTag();
         m_glitch = (m_glitch + dir + UI_GLITCH_COUNT) % UI_GLITCH_COUNT;
@@ -554,6 +554,9 @@ protected:
                 "Prefers roomier corridors and fewer extra clicks for ship and wave. No CPS limit.",
                 "Experimental and off by default. It can take longer or choose a different path.",
                 "This changes search preferences, not the game physics."}); break;
+            case 6: showInfo("Solve tick rate", {
+                "Off uses 240 TPS for the next Solve. On uses 480 TPS with Eclipse 1.9.4. Turn off its bot and speedhack.",
+                "Replay always uses the tick rate stored in its plan. This setting only applies to new searches."}); break;
             default: showInfo("Search method", searchDetails()); break;
         }
     }
@@ -1235,9 +1238,11 @@ protected:
         const auto source = uiSolutionPath(m_layer->m_level->m_levelID.value(), m_coins);
         const bool hasPlan = std::filesystem::exists(source);
         const int tps = active ? (g_cfg.profile480 ? 480 : 240) : solutionTps(source);
+        const auto solveTps = Mod::get()->getSettingValue<std::string>("solve-tps");
         const std::string status = std::string("Mode: ") + uiModeName(mode)
             + (finished ? " (finished)" : "")
-            + (active ? "  |  " + std::to_string(tps) + " TPS" : "");
+            + (active ? "  |  " + std::to_string(tps) + " TPS" : "  |  Solve " + solveTps + " TPS")
+            + (!active && hasPlan && tps > 0 ? "  |  Replay " + std::to_string(tps) + " TPS" : "");
         m_status->setString(status.c_str());
         m_replay->setEnabled(!active && !m_platformer && hasPlan);
         m_solve->setEnabled(!active && !m_platformer);
@@ -1342,7 +1347,7 @@ protected:
         exportFromPause(m_layer.data(), m_coins);
     }
     void onSettings(CCObject*) {
-        auto changed = [](int glitch, int search, bool secSolve) {
+        auto changed = [self = Ref<PausePopup>(this)](int glitch, int search, bool secSolve) {
             Mod::get()->setSavedValue<int>("play-glitch-mode", glitch);
             Mod::get()->setSavedValue<bool>("play-glitch", glitch != UI_GLITCH_OFF);
             Mod::get()->setSavedValue<int>("play-search", search);
@@ -1351,6 +1356,7 @@ protected:
             g_uiGlitch = glitch != UI_GLITCH_OFF;
             g_uiSearch = search;
             g_uiSecSolve = secSolve;
+            self->refresh();
         };
         const int search = std::clamp(Mod::get()->getSavedValue<int>("play-search", UI_SEARCH_DP),
                                       0, UI_SEARCH_COUNT - 1);

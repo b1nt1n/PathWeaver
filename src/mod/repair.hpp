@@ -7389,6 +7389,32 @@ inline void start(GJBaseGameLayer* l) {
         endSession("removed_cfg");
         return;
     }
+    if (g_cfg.profile480) {
+        const float finishX = l->m_endPortal ? l->m_endPortal->getSpawnPos().x : 0.f;
+        if (finishX <= 0.f || (g_cfg.coinRoute && !solver::g_coins.empty())) {
+            notify::show("480 TPS Solve requires a classic finish and Coins off.", NotificationIcon::Warning, 5.f);
+            endSession("solve480_unsupported_goal");
+            return;
+        }
+        captureSecsolveSettings();
+        g_stop = true;
+        g_iter = 0;
+        g_plan.clear();
+        g_cfg.inputs.clear();
+        g_cfg.practiceAt = g_cfg.checkpointAt = 0;
+        g_cfg.maxAttempts = 1;
+        g_cfg.prefixProbe = false;
+        g_cfg.slice = false;
+        secsolve::g_on = true;
+        secsolve::g_startTick = 0;
+        secsolve::g_targetX = finishX;
+        secsolve::g_horizon = static_cast<int>(std::clamp(finishX * 2.5 + 480., 480., 60000.));
+        secsolve::g_snapMode = 2;
+        secsolve::g_verifyEvery = 20;
+        g_hudPhase = "480 TPS native search";
+        writeResult("solve480: start targetX=" + std::to_string(finishX));
+        return;
+    }
     // Bumped on every request, queued or not: this generation identifies the SESSION that is
     // asking, not the job currently occupying the slot. Bumping it only in the non-queued branch
     // (as an earlier version of this fix did) left it unchanged while a request sat queued --
@@ -10165,7 +10191,7 @@ inline void tidyPlayerModes() {
 // at a frame boundary in poll(), the rule every level change in this file follows.
 inline bool onCleared() {
     // The run is told the flight cleared (dp_bridge runVerified), whatever the show does next.
-    {
+    if (!g_cfg.profile480) {
         std::vector<std::pair<long long, int>> fe;
         for (const InputCmd& c : g_plan)
             if (c.player1) fe.emplace_back((long long)c.step, c.down ? 1 : 0);

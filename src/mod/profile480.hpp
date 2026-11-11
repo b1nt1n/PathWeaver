@@ -3,7 +3,54 @@
 #include <eclipse/config.hpp>
 
 namespace p1::profile480 {
+inline constexpr auto rateKey = "global.tpsbypass";
+inline constexpr auto toggleKey = "global.tpsbypass.toggle";
+inline std::optional<std::pair<double, bool>> previousRate;
+
+inline bool canUse480() {
+    auto* mod = geode::Loader::get()->getLoadedMod("eclipse.eclipse-menu");
+    using namespace eclipse::config;
+    return mod && mod->getVersion().toVString() == "v1.9.4"
+        && !getInternal<bool>("global.speedhack.toggle", false)
+        && getInternal<int>("bot.state", 0) == 0;
+}
+
+inline void restore() {
+    if (!previousRate) return;
+    const auto [rate, enabled] = *previousRate;
+    previousRate.reset();
+    eclipse::config::setInternal<double>(rateKey, rate);
+    eclipse::config::setInternal<bool>(toggleKey, enabled);
+}
+
+inline bool prepareSession(int tps) {
+    using namespace eclipse::config;
+    if (tps == 480 && !canUse480()) return false;
+    const double rate = getInternal<double>(rateKey, 240.0);
+    const bool enabled = getInternal<bool>(toggleKey, false);
+    if ((tps == 480 && !enabled) || (enabled && rate != tps)) {
+        previousRate.emplace(rate, enabled);
+        setInternal<double>(rateKey, static_cast<double>(tps));
+        setInternal<bool>(toggleKey, true);
+    }
+    return true;
+}
+
 inline bool prepare() {
+    if (g_cfg.sessionTps != 0) {
+        const int tps = g_cfg.sessionTps;
+        if ((tps != 240 && tps != 480) || !prepareSession(tps)) {
+            writeResult("timebase: requires 240 or 480 TPS; 480 needs Eclipse 1.9.4 with its bot and speedhack off");
+            return false;
+        }
+        g_cfg.profile480 = tps == 480;
+        if (g_cfg.dpSolve && g_cfg.profile480) {
+            g_cfg.fastdt = 1.f / 480.f;
+            g_cfg.fastloops = 1; // capture the section head at an exact tick boundary
+        }
+        writeResult("timebase: session TPS=" + std::to_string(tps));
+        return true;
+    }
     if (!g_cfg.profile480) return true;
     auto* mod = geode::Loader::get()->getLoadedMod("eclipse.eclipse-menu");
     if (!mod || mod->getVersion().toVString() != "v1.9.4") {

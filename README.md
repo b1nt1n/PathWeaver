@@ -19,7 +19,7 @@
 
 PathWeaver finds a path through a classic Geometry Dash level, checks it in the game, and exports the inputs as a macro. This is an alpha.
 
-**Windows x64 · Geometry Dash 2.2081 · Geode 5.11.2 · Solve at 240 TPS**
+**Windows x64 · Geometry Dash 2.2081 · Geode 5.11.2 · Solve at 240 or 480 TPS**
 
 ## Install
 
@@ -51,7 +51,9 @@ Use the same level copy and detail mode in the player, at the exported TPS.
 
 Keep the search defaults. **Reset search** restores them. **Simpler ship/wave paths** is optional and experimental, with no CPS cap. **Detailed diagnostics** is normally off; it adds the HUD and logs for bug reports.
 
-Classic levels only. Some paths, late traps and difficult two-player sections still fail or take a long time. Save / Continue / Recheck are qualified at 240 TPS with Flip Controls off; moving trigger groups remain experimental. Solve runs at 240 TPS. The 480 TPS Replay profile is experimental.
+**Solve at 480 TPS** in PathWeaver Settings selects the experimental in-game search for the next Solve. It requires Eclipse 1.9.4 with its bot and speedhack off. Replay uses the tick rate stored with its solution.
+
+Classic levels only. Some paths, late traps and difficult two-player sections still fail or take a long time. Coin searches, Save and stop, and Export part during Solve use 240 TPS. Save / Continue / Recheck are qualified with Flip Controls off. Moving trigger groups remain experimental.
 
 Automated sessions block normal progress, statistics and achievements. Manual play records normally. To uninstall, close the game and remove the `.geode` file.
 

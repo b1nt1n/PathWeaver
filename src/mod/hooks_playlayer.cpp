@@ -108,7 +108,7 @@ public:
             g_cfg = Config{};
         } else {
             configured = uiConfigureSession(m_level->m_levelID.value(), m_budgetId, !m_automatic,
-                m_partial ? &m_partial->prefix.inputs : nullptr);
+                m_partial ? &m_partial->prefix.inputs : nullptr, !m_lineage.empty());
         }
         g_uiMode = previousMode;
         g_uiCoins = previousCoins;
@@ -240,19 +240,17 @@ static void queueFreshUiMode(PlayLayer* layer, GJGameLevel* level, bool coins, i
                 "The saved plan is unreadable or has no supported TPS metadata.", "OK")->show();
             return;
         }
-        if (tps == 480) {
-            Config previous = std::move(g_cfg);
-            g_cfg = Config{};
-            g_cfg.profile480 = true;
-            g_cfg.maxAttempts = 1;
-            const bool ready = profile480::prepare();
-            g_cfg = std::move(previous);
-            if (!ready) {
-                FLAlertLayer::create("PathWeaver Replay",
-                    "This plan requires the verified Eclipse 480 TPS playback profile.", "OK")->show();
-                return;
-            }
+        if (tps == 480 && !profile480::canUse480()) {
+            FLAlertLayer::create("PathWeaver Replay",
+                "480 TPS requires Eclipse 1.9.4 with its bot and speedhack disabled.", "OK")->show();
+            return;
         }
+    }
+    if (mode == UI_MODE_SOLVE && lineage.empty() && Mod::get()->getSettingValue<std::string>("solve-tps") == "480"
+        && !profile480::canUse480()) {
+        FLAlertLayer::create("PathWeaver Solve",
+            "480 TPS requires Eclipse 1.9.4 with its bot and speedhack disabled.", "OK")->show();
+        return;
     }
     g_uiMode = UI_MODE_NORMAL;
     g_uiArmedLevel = nullptr;
@@ -1075,7 +1073,8 @@ class $modify(PlayLayer) {
         }
         // (Not for a flight from a checkpoint: the layer puts its hold back as the checkpoint had it.
         // The same for the takeover's restore.)
-        if (!ckptRestore && !cpStart && !takeover::g_restoring && g_started && g_cfg.blockInput && !g_cfg.profile480) {
+        if (!ckptRestore && !cpStart && !takeover::g_restoring && g_started && g_cfg.blockInput
+            && (!g_cfg.profile480 || g_cfg.dpSolve)) {
             // Guard against a leftover hold: if the previous attempt ends while pressed, the
             // button carries over into tick 0 of the next attempt and it jumps continuously
             // from the very start (breaking reproduction of the same plan)
@@ -1542,6 +1541,12 @@ class $modify(PlayLayer) {
                     dpsolve::onDeath(g_tick, pos.x);
             }
         }
+    }
+
+    void checkForEnd() {
+        if (g_started && !g_sessionOver && g_cfg.profile480 && g_cfg.dpSolve
+            && secsolve::inFlight()) return;
+        PlayLayer::checkForEnd();
     }
 
     void levelComplete() {

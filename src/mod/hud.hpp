@@ -95,8 +95,9 @@ inline void speedText(char* out, size_t n) {
 inline void fillKeysHud(cocos2d::CCLabelBMFont* lbl) {
     if (!lbl) return;
     if (g_cfg.profile480) {
-        const std::string text = "480 TPS | continuous replay\n" + keyName(Key::Quit)
-            + " quit | seek and frame stepping unavailable";
+        const std::string text = g_cfg.dpSolve && !g_dpShowSolution
+            ? "480 TPS | native search\n" + keyName(Key::Quit) + " quit"
+            : "480 TPS | continuous replay\n" + keyName(Key::Quit) + " quit | seek and frame stepping unavailable";
         lbl->setString(text.c_str());
         return;
     }

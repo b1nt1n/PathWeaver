@@ -44,7 +44,7 @@ inline std::string uiSolutionPath(int levelId, bool coins) {
 }
 
 inline bool uiConfigureSession(int levelId, unsigned long long budgetId = 0, bool openTraceFiles = true,
-                               const std::vector<InputCmd>* partialInputs = nullptr) {
+                               const std::vector<InputCmd>* partialInputs = nullptr, bool resumeSearch = false) {
     if (lifecycle::entryBlocked()) {
         notify::show("PathWeaver: wait for the previous search to stop before starting another.", NotificationIcon::Warning, 4.f);
         return false;
@@ -54,6 +54,8 @@ inline bool uiConfigureSession(int levelId, unsigned long long budgetId = 0, boo
         // while the solver runs (dpsolve::start pauses it) and released when the plan lands.
         uiSessionBase(levelId, budgetId);
         g_cfg.dpSolve = true;
+        g_cfg.sessionTps = !resumeSearch && Mod::get()->getSettingValue<std::string>("solve-tps") == "480"
+            ? 480 : 240;
         g_cfg.prefixProbe = true; // Save and stop uses the confirmed main flight.
         // The overlays shown: F1 does not hide them while solving, so a solve must not inherit them
         // hidden from a replay (session_hotkeys.hpp, F1).
@@ -115,6 +117,7 @@ inline bool uiConfigureSession(int levelId, unsigned long long budgetId = 0, boo
                   g_uiSecSolve ? "" : ", no section search", g_cfg.dpSearch);
     } else if (partialInputs) {
         uiSessionBase(levelId);
+        g_cfg.sessionTps = 240;
         g_cfg.inputs = *partialInputs;
         g_cfg.prefixProbe = true;
         g_cfg.fastdt = 1.f / 240.f;
@@ -147,13 +150,7 @@ inline bool uiConfigureSession(int levelId, unsigned long long budgetId = 0, boo
         loadInputsFile(name, plan);   // again: the session base cleared the attempt sequence the first read set
         g_cfg.inputs = std::move(plan);
         g_cfg.maxAttempts = 1;
-        g_cfg.profile480 = tps == 480;
-        if (!profile480::prepare()) {
-            FLAlertLayer::create("PathWeaver Replay",
-                "This plan requires the verified Eclipse 480 TPS playback profile.", "OK")->show();
-            g_cfg = Config{};
-            return false;
-        }
+        g_cfg.sessionTps = tps;
         // Coins on: GD's own pickups are reported (`coingd:`, and the count at the clear), so the
         // replay says in the log what the eye sees on screen.
         if (g_uiCoins) {
@@ -161,6 +158,12 @@ inline bool uiConfigureSession(int levelId, unsigned long long budgetId = 0, boo
             g_cfg.coinFiles = true;
         }
         log::info("panel: replay lv{} from {}", levelId, name);
+    }
+    if (!profile480::prepare()) {
+        FLAlertLayer::create("PathWeaver",
+            "480 TPS requires Eclipse 1.9.4 with its bot and speedhack disabled.", "OK")->show();
+        g_cfg = Config{};
+        return false;
     }
     if (openTraceFiles) openFiles();
     stallwatch::start();   // so that on a stall we can say "where"
@@ -1301,6 +1304,7 @@ inline void loadConfig() {
         if (key == "levelfiletype") { g_cfg.levelFileMain = (val == "main"); continue; }
         if (key == "leveldir") { suite::g_levelDir = val; continue; }
         if (key == "profile480") { g_cfg.profile480 = (val == "1"); continue; }
+        if (key == "sessiontps") { cfgNum(key, val, g_cfg.sessionTps); continue; }
         if (key == "externalreplay") { g_cfg.externalReplay = val; continue; }
         if (key == "enabled") g_cfg.enabled = (val == "1");
         else if (key == "level") cfgNum(key, val, g_cfg.levelId);
@@ -1975,6 +1979,7 @@ inline void endSession(const std::string& why) {
     // (quitwhendone) has no next frame
     profsample::stopAndReport("session end");
     diagnostic::finish(why);
+    profile480::restore();
     g_sessionOver = true;
     writeResult("session_end: " + why);
     flushAll();

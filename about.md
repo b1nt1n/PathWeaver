@@ -2,7 +2,7 @@
 
 Solve classic levels, replay solutions, and export macros.
 
-**Windows x64 · GD 2.2081 · Geode 5.11.2 · Solve at 240 TPS**
+**Windows x64 · GD 2.2081 · Geode 5.11.2 · Solve at 240 or 480 TPS**
 
 ## Use
 
@@ -17,6 +17,8 @@ Solve classic levels, replay solutions, and export macros.
 ## Settings
 
 Use the defaults. **Reset search** restores them. **Simpler ship/wave paths** optionally reduces extra clicks without a CPS limit. Leave **Detailed diagnostics** off for a clean screen.
+
+**Solve at 480 TPS** is experimental and requires Eclipse 1.9.4 with its bot and speedhack off. Replay uses the rate saved with its plan. Use 240 TPS for coin searches, Save and stop, or Export part during Solve.
 
 Alpha for classic levels; some levels may fail to solve. Automated runs do not earn normal progress. Stop partial playback manually if your player keeps running.
 
