@@ -7506,28 +7506,41 @@ class $modify(GJBaseGameLayer) {
             finishSecJointRequest(result);
         }
         if (g_cfg.profile480 && g_cfg.dpSolve) {
-            if (foundLeaf < 0 || !g_leafVerified || g_ckptTick != 0) {
+            constexpr size_t retryCap = 512;
+            const bool retry = !g_sectionJointInputs && foundLeaf < 0 && capTotal > 0
+                && g_cap < retryCap && !cpRefused && std::strcmp(stopWhy, "none") == 0;
+            if (g_ckptTick != 0 || (!retry && (foundLeaf < 0 || !g_leafVerified))) {
                 notify::show("480 TPS Solve found no verified path.", NotificationIcon::Warning, 5.f);
                 endSession("solve480_no_path");
                 co_return;
             }
-            int held = 0;
-            const auto masks = inputVecOf(foundLeaf);
-            for (size_t i = 0; i < masks.size(); ++i) {
-                appendInputMask(g_cfg.inputs, static_cast<int>(i), held, masks[i]);
-                held = masks[i];
+            if (retry) {
+                // Closely spaced jump timings can be separated only by the next landing.
+                // Reopen the frontier once after the regular cap discarded states.
+                writeResult(fmt::format("solve480: retrying exhausted search with cap {} -> {} ({} states pruned)",
+                    g_cap, retryCap, capTotal));
+                g_cap = retryCap;
+                secsolve::g_done = false;
+                g_hudPhase = "480 TPS retrying with more states";
+            } else {
+                int held = 0;
+                const auto masks = inputVecOf(foundLeaf);
+                for (size_t i = 0; i < masks.size(); ++i) {
+                    appendInputMask(g_cfg.inputs, static_cast<int>(i), held, masks[i]);
+                    held = masks[i];
+                }
+                dpsolve::g_planClaimsGoal = true;
+                g_cfg.practiceAt = g_cfg.checkpointAt = -1;
+                secsolve::g_on = false;
+                g_cfg.fastloops = 1800;
+                g_hudPhase = "testing path at 480 TPS";
+                writeResult("solve480: verifying " + std::to_string(g_cfg.inputs.size()) + " inputs from the start");
             }
-            dpsolve::g_planClaimsGoal = true;
-            g_cfg.practiceAt = g_cfg.checkpointAt = -1;
             g_practiceOn = false;
             g_ckpt->release();
             g_ckpt = nullptr;
             g_ckptTick = -1;
-            secsolve::g_on = false;
-            g_cfg.fastloops = 1800;
             g_forceCleanStart = true;
-            g_hudPhase = "testing path at 480 TPS";
-            writeResult("solve480: verifying " + std::to_string(g_cfg.inputs.size()) + " inputs from the start");
             coinBook.restore();
             coinBook.armed = false;
             pl->resetLevel();
