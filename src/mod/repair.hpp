@@ -4721,7 +4721,7 @@ inline int fixupPass(long long t0, const std::string& startArgStr, const std::st
 
 // Find and record where this replay's model and GD first parted. Runs on the worker thread,
 // before the ladder, because a record made now is used by the ladder's very first solve.
-inline void recordFixups(long long deathTick) {
+inline void recordFixups(long long deathTick, const std::vector<InputCmd>& replayPlan) {
     if (workerBudgetSpent()) return;
     g_verifyDivT = -1;   // this death's own records only
     if (deathTick < 2 || g_fixupCount >= kFixupCap) return;
@@ -4754,8 +4754,8 @@ inline void recordFixups(long long deathTick) {
     // body and so cannot start inside a dual at all. startArg above passes the real pair, which
     // is the whole point of reading the state out of the game rather than out of a dump -- so a
     // dual anchor is just an anchor.
-    const std::string arg = startArg(t0, *r, heldBefore(g_plan, t0),
-                                     swingPendingAt(g_plan, t0));
+    const std::string arg = startArg(t0, *r, heldBefore(replayPlan, t0),
+                                     swingPendingAt(replayPlan, t0));
     std::string band;
     if (r->pmax > r->pmin) band = num(r->pmin) + "," + num(r->pmax);
     // TIME IT. Every other second of the loop is on the record -- the search prints `done in Ns`
@@ -5835,15 +5835,14 @@ inline bool ckLearn(int& learnt) {
     if (workerBudgetSpent()) return false;
     clearWorkerSearchCancel();
     const int before = g_fixupCount;
-    // The recorder replays g_planPath, reads heldBefore(g_plan, ...) and reads the dead attempt's
-    // rows. All three are the loop's own for the rest of the job, so they are lent, not replaced.
+    // Lend the checkpoint's plan and dead rows to the recorder, then restore the worker's state.
     writeInputsFile(g_planPath, d.plan);
     std::vector<InputCmd> ownPlan;
     ownPlan.swap(g_plan);
     g_plan = d.plan;
     anchors::g_dead.swap(d.rows);
     g_ckInner = true;
-    recordFixups(d.deathT);
+    recordFixups(d.deathT, d.plan);
     g_ckInner = false;
     anchors::g_dead.swap(d.rows);
     g_plan.swap(ownPlan);
@@ -7137,8 +7136,8 @@ inline void spawn(int kind, long long arg, const char* phase) {
                 // the attempt that died. Before the first death there is no flown
                 // plan, and g_plan is the same thing anyway. (Asked by the death,
                 // not by emptiness: a plan that never presses is flown too.)
-                const bool flown = g_lastDeath >= 0;
-                writeInputsFile(g_planPath, flown ? g_flownPlan : g_plan);
+                const auto& replayPlan = g_lastDeath >= 0 ? g_flownPlan : g_plan;
+                writeInputsFile(g_planPath, replayPlan);
                 // ...and SAY WHICH PLAN THAT IS. The rewind above (g_plan =
                 // g_best, in onDeath below logFingerprint) can have replaced it
                 // since GD flew, in which case the recorder compares the model's
@@ -7151,7 +7150,7 @@ inline void spawn(int kind, long long arg, const char* phase) {
                     char fb[128];
                     snprintf(fb, sizeof(fb), "dpsolve:   [resim] it=%d plan=%s",
                              g_iter,
-                             planFnv(flown ? g_flownPlan : g_plan).c_str());
+                             planFnv(replayPlan).c_str());
                     writeResult(fb);
                 }
                 // Learn first, then search. The recorder reads the trajectory GD just flew, so
@@ -7165,13 +7164,13 @@ inline void spawn(int kind, long long arg, const char* phase) {
                 // (see the g_lastDeathCoinMiss gate in fixupPass).
                 // The PHYSICAL death: under cfg coinmisspost a death can be ranked at a coin it
                 // passed (g_lastDeath), but what GD and the model disagree about is where it died.
-                recordFixups(g_lastDeathPhys >= 0 ? g_lastDeathPhys : g_lastDeath);
+                recordFixups(g_lastDeathPhys >= 0 ? g_lastDeathPhys : g_lastDeath, replayPlan);
                 if (workerBudgetSpent()) throw std::runtime_error("solve budget spent");
                 // ...and the run is told what the flight did (dp_bridge runVerified): the plan GD
                 // flew, where it died, and where the recorder saw the model part from GD.
                 {
                     std::vector<std::pair<long long, int>> fe;
-                    for (const InputCmd& c : (flown ? g_flownPlan : g_plan))
+                    for (const InputCmd& c : replayPlan)
                         if (c.player1) fe.emplace_back((long long)c.step, c.down ? 1 : 0);
                     writeResult(dpbridge::runVerified(
                         fe, g_lastDeathPhys >= 0 ? g_lastDeathPhys : g_lastDeath,
