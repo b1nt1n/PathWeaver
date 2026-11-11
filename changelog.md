@@ -1,3 +1,10 @@
+# v0.3.0-alpha.36
+
+- Add experimental 480 TPS Solve under **Pause → PathWeaver → Settings**. Solve defaults to 240 TPS.
+- Play each saved solution at its recorded tick rate and restore the previous Eclipse timing settings afterward.
+- Retry an exhausted single-input 480 TPS search with a wider frontier if the first pass discarded states. This can recover tight timings such as buffered cube jumps.
+- Use the inputs from the attempt that actually ran when recording corrections after a rewind.
+
 # v0.3.0-alpha.35
 
 - Use the new omega artwork for the Geode logo and pause menu button.

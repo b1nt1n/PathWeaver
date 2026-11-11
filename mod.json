@@ -5,7 +5,7 @@
 	},
 	"id": "b1nt1n.pathweaver",
 	"name": "PathWeaver",
-	"version": "v0.3.0-alpha.35",
+	"version": "v0.3.0-alpha.36",
 	"developers": ["b1nt1n", "gdsolver"],
 	"description": "Search for paths, verify them in-game, and export GDR or GDR2 macros.",
 	"tags": ["gameplay", "utility", "offline", "cheat"],
